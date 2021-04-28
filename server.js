@@ -21,6 +21,8 @@ server.get('/', (req,res)=>{
 server.get('/location', LocationHandler);
 server.get('/weather', weatherHandler);
 server.get('/parks' , parkHandler);
+server.get('/movies', moviesHandelr);
+server.get('/yelp', yelpHandelr);
 server.get('/get', getLocationData);
 server.get('*' , notFound);
 
@@ -133,6 +135,8 @@ function convertDate(d){
   return date;
 }
 
+
+
 function parkHandler(req,res){
 
   let cityName=req.query.search_query;
@@ -171,6 +175,85 @@ function Park(cityName){
 
 }
 
+function moviesHandelr(req, res) {
+
+  let countryReq = req.query.formatted_query.split(' ');
+  let country = countryReq[countryReq.length - 1];
+
+  if (country === 'USA') {
+    country = 'United States of America';
+  }
+
+
+  let key = process.env.MOVIE_API_KEY;
+  let regionURL = `https://api.themoviedb.org/3/configuration/countries?api_key=${key}`;
+  let region;
+
+
+  superagent.get(regionURL)
+    .then(data => {
+      let regionData = data.body;
+      regionData.forEach((item) => {
+        if (item.english_name === country) {
+          region = item.iso_3166_1;
+          console.log(region);
+        }
+
+      });
+      let movieURL = `https://api.themoviedb.org/3/discover/movie?api_key=${key}&region=${region}&sort_by=popularity.desc`;
+      superagent.get(movieURL)
+        .then(data => {
+          let moviesData = data.body.results;
+          let moviesInfo = moviesData.map((item) => {
+
+            return new Movies(item);
+          });
+
+          res.send(moviesInfo);
+        });
+
+
+    })
+    .catch(error => {
+      res.send(error);
+    });
+
+}
+
+
+function yelpHandelr(req, res) {
+  let cityName = req.query.search_query;
+  let page = req.query.page;
+  let key = process.env.YELP_API_KEY;
+  const resultPerPAge = 5;
+  const start = ((page - 1) * resultPerPAge + 1);
+  let yelpURL = `https://api.yelp.com/v3/businesses/search?location=${cityName}&limit=${resultPerPAge}&offset=${start}`;
+  superagent.get(yelpURL)
+    .set('Authorization', `Bearer ${key}`)
+    .then(data => {
+
+      let yelpData = data.body.businesses;
+
+      let yelpInfo = yelpData.map((item) => {
+
+        return new Yelp(item);
+      });
+
+      res.send(yelpInfo);
+
+    })
+    .catch(error => {
+      res.send(error);
+    });
+
+
+
+
+}
+
+
+
+
 function notFound(req,res){
   let objError = {
     status: 500,
@@ -178,6 +261,31 @@ function notFound(req,res){
   };
   res.status(500).send(objError);
 }
+
+
+function Movies(moviesData) {
+
+  this.title = moviesData.title;
+  this.overview = moviesData.overview;
+  this.average_votes = moviesData.vote_average;
+  this.total_votes = moviesData.vote_count;
+  this.image_url = `https://image.tmdb.org/t/p/w500${moviesData.poster_path}`;
+  this.popularity = moviesData.popularity;
+  this.released_on = moviesData.release_date;
+
+}
+
+function Yelp(yelpData){
+  this.name=yelpData.name;
+  this.image_url=yelpData.image_url;
+  this.price=yelpData.price;
+  this.rating=yelpData.rating;
+  this.url=yelpData.url;
+}
+
+
+
+
 
 
 client.connect()
